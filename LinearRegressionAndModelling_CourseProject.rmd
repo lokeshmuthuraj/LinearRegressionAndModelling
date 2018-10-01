@@ -1,0 +1,220 @@
+---
+title: "Modeling and prediction for movies"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+library(statsr)
+```
+
+### Load data
+
+We will load our data from the file called "movies.Rdata" using the below command.
+
+```{r load-data}
+load("movies.Rdata")
+dim(movies)
+```
+
+* * *
+
+## Part 1: Data
+
+There are 651 observations (rows) and each row is details regarding a certain movie. There are 32 variables (columns) where each column consist of details of the genre, audience score and other parameters for a specific movie.
+
+Generalizability is measure of how much the sample can be considered as a representation of the population. A sample can be considered as a population representative only when it has been randomly sampled. The problem statement states that data is randomly sampled. Therefore, we can say that what applies to the sample applies to the population as well.
+
+Causality is very critical and we must understand that not all correlation leads to causal relationships between two variables. Though the data was compiled as  random sample, there is no way of being sure that causality can be explained. This is because this some variables such as critics rating and audience score are not controlled and these variables tend to vary significantly. For establishing causality, we need controlled environment where other variables are not varying, which is not possible in this case.
+
+* * *
+
+## Part 2: Research question
+
+What are the determining variables that affect audience score of a movie?
+
+This question is interesting to answer because the question may help understand whether audience score is influenced in any way by IMDB rating, critics score, release month of movie, actor in the movie and so on.
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+We explore the numerical variables of interest which are IMDB Rating, Audience Score, Movie release month and IMDB number of votes. Below we can see the histogram data of the 4 variables of interest. We can see that the IMDB rating histogram is similar to that of a normal distribution.
+
+```{r}
+par(mfrow = c(2,2))
+hist(movies$imdb_rating, main = "Histogram of IMDB Rating", xlab = "IMDB Rating")
+hist(movies$audience_score, main = "Histogram of Audience Score", xlab = "Audience Score")
+hist(movies$thtr_rel_month, main = "Histogram of Movie Release Month", xlab = "Movie Release Month")
+hist(movies$imdb_num_votes, main = "Histogram of IMDB Number of Votes", xlab = "IMDB Number of Votes")
+```
+
+Using the commands min(), max() and mean(), we are able to find that the IMDB rating ranges from 1.9 to 9 with average of 6.49 out of 10. The IMDB number of votes ranges from 180 to 893008 votes with average of 57532.98 votes. The audience score ranges from 11 to 97 with average of 62.36 out of 100.
+
+```{r}
+min(movies$imdb_rating)
+max(movies$imdb_rating)
+mean(movies$imdb_rating)
+```
+
+To explore the relations between explanatory variables that are to be chosen for the final model, we are doing a correlation check between different explanatory variables.
+
+```{r}
+pairs(~audience_score+thtr_rel_month+imdb_rating+critics_score+imdb_num_votes,data=movies,main="Correlation check between explanatory variables")
+```
+
+We can see that from the above correlation check, we have a linear relationship exhibited between the variables critics score and audience score. There is also a relation between audience score and imdb rating. 
+
+Collinearity:
+
+The correlation between explanatory variables critics score and imdb rating seems high. To find the value, I'm using below command.
+```{r}
+movies %>%
+  summarise(cor(critics_score, imdb_rating))
+```
+
+We can see that the correlation between 2 explanatory variables is too high (76.5%). Therefore, I intend to drop critics_score variable from the model to avoid multi-collinearity.
+
+* * *
+
+## Part 4: Modeling
+
+I am expecting a linear relationship between the variables as explained in the previous section. Therefore, I am going to use a linear regression model. Initially, I will fit all useful variables into the model and I am going to eliminate variables one at a time using the Adjusted R-squared value. This helps me to corner down on very important variables without losing out on other variables.
+
+
+The variables I will neglect are actor names, director names, title, urls, dvd release variable, studio as they will not give me any information regarding audience score. They are just information to identify the movie and not the audience score. All the remaining variables are considered for my model below.
+
+Let the initial model be with 16 variables as below;
+```{r}
+mod1 <- lm(audience_score~title_type+genre+runtime+mpaa_rating+thtr_rel_year+thtr_rel_month+thtr_rel_day+imdb_rating+imdb_num_votes+critics_rating+critics_score+best_pic_nom+best_pic_win+best_actor_win+best_actress_win+best_dir_win, data = movies)
+summary(mod1)
+summary(mod1)$adj.r.squared
+```
+Adjusted R-squared at this step = 0.7687. We can see from the p-values which variables are significant and can remove other variables. The p-values are greater than 0.05, we can say that they do not significantly contribute to the audience score. Therefore, we can eliminate these variables where p-value is higher than 0.05 in our next step and check adjusted R-squared values again.
+
+The variables that have p-value higher than 0.05 and can be removed are:
+
+title_type; mpaa_rating; thtr_rel_month; thtr_rel_day; imdb_num_votes; critics_score; best_pic_nom; best_pic_win; best_actor_win; best_actress_win; best_dir_win;
+
+```{r}
+mod2 <- lm(audience_score~title_type+genre+runtime+mpaa_rating+thtr_rel_year+thtr_rel_month+thtr_rel_day+imdb_rating+imdb_num_votes+critics_rating+critics_score, data = movies)
+summary(mod2)$adj.r.squared
+```
+We can see that the Adjusted R-squared at this step is 0.7678. This means there is some variable that is present in the eliminated variables that is contributing to the audience score. After trial and error, it is found that the best actress variable has slight impact on the audience score. Therefore, we are adding the variable back to the model.
+```{r}
+mod3 <- lm(audience_score~title_type+genre+runtime+mpaa_rating+thtr_rel_year+thtr_rel_month+thtr_rel_day+imdb_rating+imdb_num_votes+critics_rating+critics_score+best_actress_win, data = movies)
+summary(mod3)$adj.r.squared
+```
+Now, the adjusted R-squared value is 0.7684 after removing 3 variables from the inital model. Similarly, we can eliminate theatre release month, theatre release day, mpaa rating, runtime and title type as their p-values are greater than 0.05.
+```{r}
+mod4 <- lm(audience_score~title_type+genre+runtime+mpaa_rating+thtr_rel_year+imdb_rating+imdb_num_votes+critics_rating+critics_score+best_actress_win, data = movies)
+summary(mod4)$adj.r.squared
+```
+Adjusted R-squared = 0.7683 after removing 2 variables (theatre release day & month).
+```{r}
+mod5 <- lm(audience_score~genre+runtime+thtr_rel_year+imdb_rating+critics_rating+best_actress_win, data = movies)
+summary(mod5)$adj.r.squared
+```
+Adjusted R-squared = 0.77 after removing 4 variables (title type, mpaa rating, imdb number of votes, critics score)
+
+This is the best adjusted R-square value I have arrived by removing variables according to their p-value. If I remove even one variable after this, there is a decrease in the R-squared value. Though p-value of best actress is more than 0.05, it is affecting the audience score, adjusted R-square value and therefore, the variable is still included in the final model.
+
+We are finally left with 6 variables that best predict the value of audience score.
+
+
+##Diagnostics for Regression Line
+
+We have to meet the 3 criteria mentioned for the best fit as mentioned in the course:
+
+1) Linear relation between variables
+
+2) Constant Variability of residuals plot
+
+3) Distribution of residuals around 0.
+
+We saw earlier that the audience score and imdb ratings were linearly related. The model also contains imdb rating and therefore, we can say that there is linear relation between variables.
+
+Below plots shows scatterplot of residuals vs fitted values. We can see in the below plot that there is no fan out in the residuals plot. Therefore, the residual plot has constant variability and has satisfied the condition.
+```{r}
+ggplot(data = mod5, aes(x = .fitted, y = .resid)) +
+  geom_point() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Fitted values") +
+  ylab("Residuals")
+```
+
+```{r}
+par(mfrow=c(1,2))
+hist(mod5$residuals, main='Histogram of Residuals',xlab = "Residuals")
+qqnorm(mod5$residuals,main='Normal Probability of Residuals')
+qqline(mod5$residuals)
+```
+
+We can see that the distribution of the residuals is also similar to normal distribution centered around 0. Therefore, condition of normal distribution of the residuals is also met.
+
+## Interpretation of Model Coefficients
+
+1) Intercept - 154.02. When all explanatory variables are held zero, intercept = 154.02. Therefore, for Action & Adventure Genre movie with critics rating as "Certified Fresh", the audience score is 154.02, which makes no sense. Therefore, intercept is only present to adjust the height of the regression line.
+
+2) genreAnimation = 8.73. When all explanatory variables are held constant, if Genre of the movie is animation, the film gets 8.73 more audience score than Action & Adventure genre film on average.
+
+3) genreArt House & International = -0.07. When all explanatory variables are held constant, if Genre of the movie is House & International, the film gets 0.07 less audience score than Action & Adventure genre film on average.
+
+4) genreComedy = 2.17. When all explanatory variables are held constant, if Genre of the movie is Comedy, the film gets 2.17 more audience score than Action & Adventure genre film on average.
+
+5) genreDocumentary = 1.97. When all explanatory variables are held constant, if Genre of the movie is Documentary, the film gets 1.97 more audience score than Action & Adventure genre film on average.
+
+6) genreDrama = 0.48. When all explanatory variables are held constant, if Genre of the movie is Drama, the film gets 0.48 more audience score than Action & Adventure genre film on average.
+
+7) genreHorror = -5.42. When all explanatory variables are held constant, if Genre of the movie is Horror, the film gets 5.42 less audience score than Action & Adventure genre film on average.
+
+8) genreMusical & Performing Arts = 5.15. When all explanatory variables are held constant, if Genre of the movie is Musical & Performing Arts, the film gets 5.15 more audience score than Action & Adventure genre film on average. 
+
+9) genreMystery & Suspense = -5.31. When all explanatory variables are held constant, if Genre of the movie is Mystery & Suspense, the film gets 5.31 less audience score than Action & Adventure genre film on average.
+
+10) genreOther = 1.56. When all explanatory variables are held constant, if Genre of the movie is Other, the film gets 1.56 more audience score than Action & Adventure genre film on average.
+
+11) genreScience Fiction & Fantasy = -1.23. When all explanatory variables are held constant, if Genre of the movie is Science Fiction & Fantasy, the film gets 1.23 less audience score than Action & Adventure genre film on average.
+
+12) runtime = -0.04. When all explanatory variables are held constant, each unit increase in runtime decreases the audience score by 0.04 on average.
+
+13) thtr_rel_year = -0.09. When all explanatory variables are held constant, each unit increase in release year decreases the audience score by 0.09 on average.                   
+
+14) imdb_rating = 15.03. When all explanatory variables are held constant, each unit increase in imdb rating increases the audience score by 15.03 on average.
+
+15) critics_ratingFresh = -3.14. When all explanatory variables are held constant, when critics rating of a movie is "Fresh", the audience score decreases by 3.14 compared to a movie having "Certified Fresh" rating from critics on average.
+
+16) critics_ratingRotten = -5.49. When all explanatory variables are held constant, when critics rating of a movie is "Rotten", the audience score decreases by 5.49 compared to a movie having "Certified Fresh" rating from critics on average.
+
+17) best_actress_winyes = -1.89. When all explanatory variables are held constant, for a movie starring an oscar award actress, the audience score decreases by 1.89 compared to a movie not starring an oscar award actress.
+* * *
+
+## Part 5: Prediction
+
+The movie for which I'm going to predict the audience scores is "Doctor Strange". I have to set these values for the movie which I'm taking from the internet.
+
+```{r}
+doctorstrange<-data.frame(genre="Action & Adventure", runtime=130,thtr_rel_year=2016,imdb_rating=7.9,critics_rating="Certified Fresh",best_actress_win="no")
+
+predict(mod5, doctorstrange, interval = "prediction", level = 0.95)
+```
+The model predicts audience score for "Doctor Strange" as 84.43. The original audience score for the movie from Rotten Tomatoes is 86, which is very close to the predicted audience score.
+
+We can say that the model predicts with 95% confidence that audience score for "Doctor Strange" lies within the interval 62.94 to 103.48. 
+
+* * *
+
+## Part 6: Conclusion
+
+We started with the aim to find the determining variables that affect audience score of a movie. We had plotted to see correlation between different explanatory variables. We had used backward elimination method using R-squared until a final model with 5 variables were left. We can see that Genre, runtime, Release Year, IMDB rating, Critic Rating and if movie starring an oscar winning actress all play a role in audience score. We eliminated the collinearity between critics_score and imdb_ratings by removing critics_score variable. We were able to predict the audience score of "Doctor Strange" movie with decent accuracy.
+
+The model is able to predict 77% of the variability in audience score.
+
+Some drawbacks of this model is that it is not very accurate. For "Doctor Strange" movie, the range of audience score was 62.94 to 103.48. The upper limit has crossed 100 which was the maximum audience score. The model is not very robust because either the data needed to train is more or there maybe other variables which need to be considered for the model to be more accurate in predicting audience score.
